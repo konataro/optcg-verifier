@@ -11,6 +11,8 @@ export class CameraScanner {
     this.canvas = null;
     this.ctx = null;
     this.active = false;
+    this.track = null;
+    this.capabilities = {};
   }
 
   /** ¿SOPORTA la cámara este navegador? */
@@ -24,14 +26,20 @@ export class CameraScanner {
     this.stream = await navigator.mediaDevices.getUserMedia({
       video: {
         facingMode: { ideal: "environment" }, // cámara trasera en móviles
-        width: { ideal: 1920 },
-        height: { ideal: 1080 },
+        // pedimos resolución REAL: min obligatorio + ideal 4K (el navegador
+        // negocia lo mejor disponible; ideal solo no alcanza para el OCR)
+        width: { min: 1280, ideal: 3840 },
+        height: { min: 720, ideal: 2160 },
+        frameRate: { ideal: 30 },
       },
       audio: false,
     });
     this.video.srcObject = this.stream;
     await this.video.play().catch(() => {});
     this.active = true;
+    this.track = this.stream.getVideoTracks()[0] || null;
+    this.capabilities = this.track?.getCapabilities?.() || {};
+    return this.capabilities;
   }
 
   stop() {
@@ -41,6 +49,58 @@ export class CameraScanner {
     }
     if (this.video) this.video.srcObject = null;
     this.active = false;
+    this.track = null;
+    this.capabilities = {};
+  }
+
+  /* ---------- zoom digital (donde el hardware lo soporte) ---------- */
+
+  supportsZoom() {
+    const caps = this.capabilities;
+    return caps && typeof caps.zoom === "object" && caps.zoom.max > caps.zoom.min;
+  }
+
+  getZoom() {
+    const s = this.track?.getSettings?.() || {};
+    return s.zoom ?? this.capabilities?.zoom?.min ?? 1;
+  }
+
+  async adjustZoom(delta) {
+    if (!this.supportsZoom() || !this.track) return null;
+    const caps = this.capabilities.zoom;
+    const target = Math.min(caps.max, Math.max(caps.min, this.getZoom() + delta * (caps.step || 0.5)));
+    try {
+      await this.track.applyConstraints({ advanced: [{ zoom: target }] });
+      return target;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /** límites útiles para dibujar el control: { min, max, value } */
+  zoomInfo() {
+    if (!this.supportsZoom()) return null;
+    return {
+      min: this.capabilities.zoom.min,
+      max: this.capabilities.zoom.max,
+      value: this.getZoom(),
+    };
+  }
+
+  /* ---------- linterna (donde el hardware lo soporte) ---------- */
+
+  supportsTorch() {
+    return !!this.capabilities?.torch;
+  }
+
+  async setTorch(on) {
+    if (!this.supportsTorch() || !this.track) return false;
+    try {
+      await this.track.applyConstraints({ advanced: [{ torch: !!on }] });
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   /** Toma un frame del video, lo recorta al área de la carta y lo devuelve. */
@@ -60,7 +120,7 @@ export class CameraScanner {
       sh = Math.min(vh - sy, Math.round(vh * crop.h));
       if (sw < 8 || sh < 8) return null;
     }
-    const MAX_W = 1280;
+    const MAX_W = 1600; // upscaled crops plean mejor texto; 1600 sigue siendo liviano
     const scale = Math.min(1, MAX_W / sw);
     out.width = Math.round(sw * scale);
     out.height = Math.round(sh * scale);

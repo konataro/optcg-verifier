@@ -26,6 +26,15 @@ python -m http.server 8000
 # abre http://localhost:8000
 ```
 
+## 📷 Los dos modos de escaneo
+
+| Modo | Cuándo usarlo | Qué hace |
+|---|---|---|
+| **🃏 Carta completa** | La carta entra bien en el marco | OCR de toda la captura: código + nombre como respaldo |
+| **🔍 Solo código** | La carta no cabe en el marco (o tienes la carta cerca y quieres máxima precisión) | Recorta **exactamente** lo que ves en el marco chico (WYSIWYG, compensando el `object-fit` del video) y OCRiza solo esa franja → ~3-4× más resolución efectiva sobre el texto |
+
+Si el recorte corto no produce un código, la app lo avisa y siempre puedes cambiar de modo o escribir el código a mano. El código va impreso en la esquina inferior izquierda de la cara de la carta ( arriba de la línea de copyright).
+
 > La cámara requiere contexto seguro: `localhost` vale para pruebas; en producción
 > despliega con HTTPS (GitHub Pages, Netlify, Vercel — plan gratuito).
 
@@ -46,8 +55,8 @@ opcg-verifier/
 │  ├─ scanner.js         # cámara getUserMedia + captura a canvas
 │  ├─ prices.js          # API de precios con cola, backoff y caché
 │  └─ db.js              # IndexedDB (caché de precios)
-├─ data/catalog.json     # catálogo generado (3.000+ cartas, 32 sets, ~1.7 MB)
-├─ tools/build_catalog.py  # regenera data/catalog.json desde apitcg/one-piece-tcg-data
+├─ data/catalog.json     # catálogo generado (~4.900 cartas: OP01→OP17, EB, PRB, promos)
+├─ tools/build_catalog.py  # regenera data/catalog.json desde buhbbl/punk-records
 └─ tools/make_icons.py     # regenera los iconos PWA si cambia el diseño
 ```
 
@@ -55,7 +64,7 @@ opcg-verifier/
 
 | Fuente | Uso | Salvaguardas |
 |---|---|---|
-| **Catálogo apitcg** (GitHub) | descargado **una vez por build** con `tools/build_catalog.py` | en runtime: **0 llamadas** |
+| **Catálogo punk-records** (GitHub) | descargado **una vez por build** con `tools/build_catalog.py` | en runtime: **0 llamadas** |
 | **TCG Price Lookup** (free: 100 req/día) | precios bajo demanda | caché IndexedDB 24 h · espaciado ≥ 1.1 s · backoff ante 429/5xx · crédito visible "Powered by TCG Price Lookup" |
 | **Tesseract.js** (CDN jsDelivr) | OCR | se carga bajo demanda, solo cuando escaneas |
 | **Imágenes de cartas** (CDN de Bandai) | ficha visual | carga directa; si el hotlinking falla, proxy [wsrv.nl](https://wsrv.nl) con su propia caché |
@@ -80,13 +89,15 @@ Cuando salgan sets nuevos:
 python tools/build_catalog.py
 ```
 
-The script descarga los JSON de `apitcg/one-piece-tcg-data` (con reintentos
+The script descarga los JSON de `buhbbl/punk-records` (actualizados automáticamente
+cada pocos días con vegapull, con reintentos
 y ritmo moderado) y reescribe `data/catalog.json`.
 
 ## ⚖️ Créditos y aviso
 
-- Datos de cartas: [apitcg/one-piece-tcg-data](https://github.com/apitcg/one-piece-tcg-data), derivados de la
-  [cardlist oficial de Bandai](https://en.onepiece-cardgame.com/cardlist/).
+Fuente: [buhbbl/punk-records](https://github.com/buhbbl/punk-records) — dataset con `vegapull`
+contra la [cardlist oficial de Bandai](https://en.onepiece-cardgame.com/cardlist/),
+actualizado automáticamente cada pocos días (OP-01 → OP-17, EB, PRB, ST en inglés).
 - Precios: [TCG Price Lookup](https://tcgpricelookup.com).
 - **One Piece Card Game © Eiichiro Oda / Shueisha / Toei Animation / BANDAI NAMCO Entertainment Inc.**
 - Proyecto educativo/personal, sin fines comerciales. La app no autoriza el uso comercial de precios

@@ -11,7 +11,7 @@
   ============================================================ */
 
 import { catalog, esc, escMultiline } from "./catalog.js";
-import { recognize, extractCodeCandidates, extractNameWords } from "./ocr.js";
+import { recognize, preprocess, extractCodeCandidates, extractNameWords } from "./ocr.js";
 import { CameraScanner, fileToCanvas } from "./scanner.js";
 import { priceService } from "./prices.js";
 
@@ -140,17 +140,54 @@ function renderScanView() {
       }
     };
     btnCapture.onclick = async () => {
-      // modo "solo código": recortamos exactamente lo que el usuario encaja en el marco
-      const canvas = scanMode === "code" && guide
-        ? scanner.captureFrame(guide)
-        : scanner.capture(null);
-      if (!canvas) {
-        // marco fuera de rango → captura completa como respaldo
-        await identify(scanner.capture(null), status, result);
-        return;
+      // modo "solo código": recorte exacto del marco con respaldo al frame completo
+      if (scanMode === "code" && guide) {
+        const tight = scanner.captureFrame(guide);
+        if (tight) {
+          await identify(tight, status, result, { fallback: scanner.capture(null) });
+          return;
+        }
+        toast("El marco no da un recorte útil; capturando el frame completo…");
       }
-      await identify(canvas, status, result);
+      const canvas = scanner.capture(null);
+      if (canvas) await identify(canvas, status, result);
     };
+
+    // controles de zoom/linterna solo en hardware que los soporte
+    const camActions = btnCapture.parentElement;
+    const zoomRow = document.createElement("div");
+    zoomRow.className = "cam-actions zoom-row";
+    zoomRow.hidden = true;
+    const zInfo = scanner.zoomInfo();
+    if (zInfo) {
+      zoomRow.hidden = false;
+      zoomRow.innerHTML = `
+        <span class="muted small">Zoom <b data-z="val">${(+zInfo.value).toFixed(1)}×</b></span>
+        <button class="btn ghost" data-z="minus" aria-label="Menos zoom">－</button>
+        <button class="btn ghost" data-z="plus" aria-label="Más zoom">＋</button>`;
+      const zval = () => +zoomRow.querySelector("[data-z=val]").textContent.replace("×", "");
+      const setZ = (v) => { zoomRow.querySelector("[data-z=val]").textContent = `${(+v).toFixed(1)}×`; };
+      zoomRow.querySelector('[data-z="plus"]').onclick = async () => { const z = await scanner.adjustZoom(+1); if (z != null) setZ(z); };
+      zoomRow.querySelector('[data-z="minus"]').onclick = async () => { const z = await scanner.adjustZoom(-1); if (z != null) setZ(z); };
+    }
+    if (scanner.supportsTorch()) {
+      zoomRow.hidden = false;
+      const torch = document.createElement("button");
+      torch.className = "btn ghost";
+      torch.textContent = "🌟 Linterna";
+      torch.onclick = async () => {
+        const state = torch.dataset.on === "1";
+        const ok = await scanner.setTorch(!state);
+        if (ok) {
+          torch.dataset.on = state ? "0" : "1";
+          torch.classList.toggle("primary", !state);
+        } else {
+          toast("La linterna no está disponible en este dispositivo.");
+        }
+      };
+      zoomRow.appendChild(torch);
+    }
+    camActions.after(zoomRow);
   }
 
   fileIn.onchange = async () => {
@@ -178,7 +215,7 @@ function renderScanView() {
 
 /* ------------------ pipeline de identificación ------------------ */
 
-async function identify(canvas, status, result) {
+async function identify(canvas, status, result, { fallback = null } = {}) {
   lastCanvas = canvas;
   status.hidden = false;
   result.hidden = true;
@@ -190,32 +227,39 @@ async function identify(canvas, status, result) {
     return;
   }
 
-  status.innerHTML = `<div class="spinner"></div> Leyendo la carta (OCR, sin salir de tu navegador)…`;
-  let text = "";
-  try {
-    text = await recognize(canvas, (m) => {
-      if (m.progress) {
-        status.innerHTML = `<div class="spinner"></div> OCR: ${Math.round(m.progress * 100)}% (${esc(m.status)})`;
-      }
-    });
-  } catch (e) {
-    status.textContent = `⚠️ OCR falló: ${e.message}. Prueba con una foto más nítida o entra el código a mano.`;
-    return;
-  }
+  // Cadena OCR: 1ª pasada sobre la imagen pre-procesada (escala + gris +
+  // contraste, pensada para frames de cámara); si no da código, 2ª sobre el original.
+  const variantsTexts = [preprocess(canvas), canvas].filter(Boolean);
+  let combinedText = "";
 
-  // 1) por código
-  const code = findCode(text);
-  if (code) {
-    const variants = catalog.getCode(code);
-    if (variants.length) {
-      status.hidden = true;
-      renderResult(variants, canvas, result);
+  for (const variant of variantsTexts) {
+    status.innerHTML = `<div class="spinner"></div> Leyendo la carta (OCR, sin salir de tu navegador)…`;
+    let text = "";
+    try {
+      text = await recognize(variant, (m) => {
+        if (m.progress) {
+          status.innerHTML = `<div class="spinner"></div> OCR: ${Math.round(m.progress * 100)}% (${esc(m.status)})`;
+        }
+      });
+    } catch (e) {
+      status.textContent = `⚠️ OCR falló: ${e.message}. Prueba con una foto más nítida o entra el código a mano.`;
       return;
+    }
+    combinedText += "\n" + text;
+
+    const code = findCode(text);
+    if (code) {
+      const variants = catalog.getCode(code);
+      if (variants.length) {
+        status.hidden = true;
+        renderResult(variants, canvas, result);
+        return;
+      }
     }
   }
 
   // 2) fallback por nombre
-  const words = extractNameWords(text);
+  const words = extractNameWords(combinedText);
   if (words.length >= 2) {
     const query = words.slice(0, 8).join(" ");
     const hits = catalog.searchByName(query, { limit: 20 });
@@ -236,13 +280,24 @@ async function identify(canvas, status, result) {
     }
   }
 
-  // 3) nada confiable
+  // 3) nada confiable → ¿hay captura completa como respaldo (cámara modo código)?
+  if (fallback && fallback !== canvas) {
+    status.innerHTML = `<div class="spinner"></div> El recorte corto no rindió; reintentando con el frame completo…`;
+    return identify(fallback, status, result);
+  }
+
+  // 4) nada confiable → diagnóstico honesto
   const tightFailed = scanMode === "code";
+  const rawOcr = [...new Set(combinedText.split(/\n+/).map((l) => l.trim()).filter(Boolean))].slice(0, 40);
   status.innerHTML = `
     <p>⚠️ No pude identificar la carta con confianza.</p>
     <p class="hint">Consejos: mejor luz, carta completa en el marco, sin reflejos.
     También puedes escribir el código a mano abajo.</p>
-    ${tightFailed ? `<p class="hint warn">Estás en modo "Solo código": si el texto quedó borroso o cortado, prueba con más luz, acercás el marco o cambia a "Carta completa" para que se lea también el nombre.</p>` : ""}`;
+    ${tightFailed ? `<p class="hint warn">Estás en modo "Solo código": prueba con más luz, acercás el marco (o el zoom ＋/－) o cambia a "Carta completa".</p>` : ""}
+    <details class="ocr-debug">
+      <summary>Ver el texto bruto que leyó el OCR</summary>
+      <pre>${esc(rawOcr.join("\n").slice(0, 2000)) || "(vacío: el OCR no leyó nada)"}</pre>
+    </details>`;
 }
 
 function findCode(text) {

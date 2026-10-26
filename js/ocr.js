@@ -74,3 +74,59 @@ export function extractNameWords(text) {
     .trim().split(/\s+/)
     .filter((w) => w.length >= 3);
 }
+
+/**
+ * Pre-procesado de imagen para el OCR (100% local, sin dependencias):
+ *  1. escala a un ancho objetivo (~1600 px) → el texto gana píxeles reales
+ *  2. escala de grises con estiramiento de contraste (percentiles 2%–98%)
+ *     → neutraliza reflejos y bordes lavados típicos de la cámara
+ *
+ * Devuelve un canvas nuevo; el original queda intacto.
+ */
+export function preprocess(srcCanvas, targetW = 1600) {
+  if (!srcCanvas || !srcCanvas.width) return srcCanvas;
+  const scale = Math.max(1, targetW / srcCanvas.width); // nunca reduce aquí
+  const out = document.createElement("canvas");
+  out.width = Math.round(srcCanvas.width * scale);
+  out.height = Math.round(srcCanvas.height * scale);
+  const g = out.getContext("2d", { willReadFrequently: true });
+  g.imageSmoothingEnabled = true;
+  g.imageSmoothingQuality = "high";
+  g.drawImage(srcCanvas, 0, 0, out.width, out.height);
+
+  let img;
+  try {
+    img = g.getImageData(0, 0, out.width, out.height);
+  } catch {
+    return out; // imagen "tainted" (raro en flujo cámara): devolvemos tal cual
+  }
+  const px = img.data;
+
+  // histograma de luminancia para el estiramiento
+  const hist = new Uint32Array(256);
+  const n = px.length;
+  for (let i = 0; i < n; i += 4) {
+    const lum = (0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2]) | 0;
+    hist[lum]++;
+  }
+  const total = n / 4;
+  const loCut = total * 0.02, hiCut = total * 0.98;
+  let acc = 0, lo = 0, hi = 255;
+  for (let v = 0; v < 256; v++) {
+    acc += hist[v];
+    if (acc <= loCut) lo = v;
+    if (acc <= hiCut) hi = v;
+  }
+  if (hi - lo < 20) { lo = 0; hi = 255; } // imagen casi plana: no estires
+  const span = hi - lo;
+
+  for (let i = 0; i < n; i += 4) {
+    let lum = (0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2]) | 0;
+    let v = (lum - lo) * (255 / span);
+    v = v < 0 ? 0 : v > 255 ? 255 : v;
+    px[i] = px[i + 1] = px[i + 2] = v;
+    px[i + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  return out;
+}

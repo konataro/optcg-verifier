@@ -186,6 +186,21 @@ body {
 }
 
 .cam-actions { display: flex; gap: .5rem; padding: .75rem .5rem .25rem; }
+.zoom-row { align-items: center; padding-top: 0; }
+.zoom-row b { color: var(--accent); }
+
+.ocr-debug { margin-top: .5rem; font-size: .78rem; }
+.ocr-debug summary { cursor: pointer; color: var(--muted); }
+.ocr-debug pre {
+  white-space: pre-wrap;
+  background: var(--bg3);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: .5rem;
+  max-height: 9rem;
+  overflow: auto;
+  color: var(--muted);
+}
 
 /* ---------- subida / manual ---------- */
 .upload-row {

@@ -14,7 +14,7 @@
   Para actualizar la app: subí estos archivos y CAMBIÉ VERSION.
   ============================================================ */
 
-const VERSION = "v1.2.0"; // + modo zoom de código (recorte WYSIWYG del marco guía)
+const VERSION = "v1.3.0"; // + cámara reforzada: min constraints, pre-procesado OCR, zoom, linterna, debug
 const SHELL_CACHE = `opcg-shell-${VERSION}`;
 const IMG_CACHE = "opcg-imgs";
 const IMG_LIMIT = 300;

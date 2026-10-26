@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0d1117" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="OPTCG" />
+  <meta name="description" content="Identifica y valora cartas del One Piece TCG con tu cámara. Datos oficiales precargados, uso responsable de APIs." />
+  <title>OPTCG Verifier — Identifica y valora tus cartas de One Piece</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <h1>🏴‍☠️ OPTCG <span>Verifier</span></h1>
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-tab="scan" role="tab" aria-selected="true">📷 Escanear</button>
+      <button class="tab" data-tab="search" role="tab" aria-selected="false">🔍 Buscar</button>
+      <button class="tab" data-tab="settings" role="tab" aria-selected="false">⚙️ Ajustes</button>
+    </nav>
+  </header>
+
+  <main id="view" class="view" aria-live="polite"></main>
+
+  <footer class="app-footer">
+    <p>
+      Datos de cartas de
+      <a href="https://github.com/apitcg/one-piece-tcg-data" target="_blank" rel="noopener">apitcg/one-piece-tcg-data</a>
+      (fuente: <a href="https://en.onepiece-cardgame.com/" target="_blank" rel="noopener">web oficial de Bandai</a>).
+      One Piece Card Game © Eiichiro Oda / Shueisha / Toei Animation / BANDAI NAMCO Entertainment Inc.
+    </p>
+    <p id="price-credit" hidden>
+      Precios: <a href="https://tcgpricelookup.com" target="_blank" rel="noopener">Powered by TCG Price Lookup</a>
+    </p>
+    <p class="disclaimer">
+      ⚠️ Esta app no certifica la autenticidad de una carta: la compara contra la ficha oficial para que tú decidas.
+    </p>
+  </footer>
+
+  <div id="toast" class="toast" hidden></div>
+  <div id="modal-root"></div>
+
+  <script src="js/pwa.js" defer></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

@@ -51,13 +51,14 @@ export class CameraScanner {
     const out = document.createElement("canvas");
     const vw = v.videoWidth, vh = v.videoHeight;
 
-    // recorte al marco de guía (proporciones relativas)
+    // recorte al marco de guía (proporciones relativas al frame del video)
     let sx = 0, sy = 0, sw = vw, sh = vh;
     if (crop) {
       sx = Math.round(vw * crop.x);
       sy = Math.round(vh * crop.y);
-      sw = Math.round(vw * crop.w);
-      sh = Math.round(vh * crop.h);
+      sw = Math.min(vw - sx, Math.round(vw * crop.w));
+      sh = Math.min(vh - sy, Math.round(vh * crop.h));
+      if (sw < 8 || sh < 8) return null;
     }
     const MAX_W = 1280;
     const scale = Math.min(1, MAX_W / sw);
@@ -66,6 +67,47 @@ export class CameraScanner {
     out.getContext("2d").drawImage(v, sx, sy, sw, sh, 0, 0, out.width, out.height);
     return out;
   }
+
+  /** Recorta exactamente lo que el usuario ve dentro del marco guía (WYSIWYG). */
+  captureFrame(frameEl) {
+    const crop = cropRectForFrame(this.video, frameEl);
+    if (!crop) return null;
+    return this.capture(crop);
+  }
+}
+
+/**
+ * Convierte la posición del marco guía (en pantalla) a un recorte
+ * relativo del frame del video, compensando el object-fit: cover.
+ *
+ * Math: con cover, el video se escala por `scale` y se centra;
+ * el píxel (fx, fy) de pantalla corresponde a
+ *   videoX = (fx - videoLeft + dx) / scale  con  dx = (vw*scale - anchoVisible)/2.
+ */
+export function cropRectForFrame(video, frameEl) {
+  if (!video || !frameEl) return null;
+  const vRect = video.getBoundingClientRect();
+  const fRect = frameEl.getBoundingClientRect();
+  if (!vRect.width || !vRect.height || !fRect.width) return null;
+  const vw = video.videoWidth || vRect.width;
+  const vh = video.videoHeight || vRect.height;
+
+  const scale = Math.max(vRect.width / vw, vRect.height / vh);
+  const dx = (vw * scale - vRect.width) / 2;
+  const dy = (vh * scale - vRect.height) / 2;
+
+  const vx = ((fRect.left - vRect.left) + dx) / scale;
+  const vy = ((fRect.top - vRect.top) + dy) / scale;
+  const fw = fRect.width / scale;
+  const fh = fRect.height / scale;
+
+  // clamp al frame real del video
+  const x = Math.min(Math.max(vx, 0), vw - 2);
+  const y = Math.min(Math.max(vy, 0), vh - 2);
+  const w = Math.min(Math.max(fw, 2), vw - x);
+  const h = Math.min(Math.max(fh, 2), vh - y);
+
+  return { x: x / vw, y: y / vh, w: w / vw, h: h / vh };
 }
 
 /** Carga un File (imagen subida) a un canvas normalizado. */

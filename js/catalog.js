@@ -95,6 +95,42 @@ export class Catalog {
     return out;
   }
 
+  /**
+   * Parseo ESTRICTO para entrada manual: nunca "corrige" el prefijo.
+   * Devuelve { code, prefixKnown } si la forma es válida, null si no.
+   * El caller decide: prefixKnown=false o variantes vacías → "no verificado".
+   */
+  strictParse(raw) {
+    let s = String(raw ?? "")
+      .toUpperCase()
+      .replace(/[—–_]/g, "-")
+      .replace(/[^A-Z0-9-]/g, "")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
+    if (!s) return null;
+
+    let prefix = "", num = "";
+    const withDash = s.match(/^([A-Z0-9]{1,5})-(\d{3})$/);
+    if (withDash) {
+      prefix = withDash[1];
+      num = withDash[2];
+    } else {
+      const noDash = s.match(/^([A-Z]+)(\d{3,8})$/);
+      if (!noDash) return null;
+      const letters = noDash[1];
+      const digits = noDash[2];
+      if (digits.length <= 3) {
+        prefix = letters;
+        num = digits;
+      } else {
+        num = digits.slice(-3);
+        prefix = letters + digits.slice(0, -3);
+      }
+    }
+    const code = `${prefix}-${num}`;
+    return { code, prefixKnown: this.byPrefix.has(prefix) };
+  }
+
   /** Canonicaliza un código OCR corrigiendo confusiones típicas del OCR. */
   fixCodeCandidate(raw) {
     let s = raw.toUpperCase()

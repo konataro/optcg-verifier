@@ -50,7 +50,7 @@ export function extractCodeCandidates(text) {
 
   const candidates = new Set();
   // bloque 1: 2-4 alfanum + separador + bloque 2: 3 chars con posible confusión
-  const re = /([A-Z0-9]{1,4}) ?- ?([0-9OILSZTBD]{3})/g;
+  const re = /([A-Z0-9]{1,5}) ?- ?([0-9OILSZTBD]{3})/g;
   let m;
   while ((m = re.exec(up)) !== null) {
     candidates.add(`${m[1]}-${m[2]}`);

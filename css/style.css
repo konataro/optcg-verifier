@@ -111,6 +111,30 @@ body {
 
 .file-label { position: relative; overflow: hidden; }
 
+/* ---------- selector de modo de captura ---------- */
+.mode-switch {
+  display: flex;
+  gap: .4rem;
+  margin: .5rem 0 .2rem;
+}
+.mode-btn {
+  flex: 1;
+  padding: .45rem .5rem;
+  background: var(--bg3);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: .82rem;
+  cursor: pointer;
+  transition: color .15s, border-color .15s, background .15s;
+}
+.mode-btn.active {
+  color: #201400;
+  background: linear-gradient(135deg, var(--accent), #c98a1c);
+  border-color: transparent;
+  font-weight: 600;
+}
+
 /* ---------- cámara ---------- */
 .camera-wrap {
   position: relative;
@@ -148,6 +172,17 @@ body {
   color: var(--accent);
   white-space: nowrap;
   text-shadow: 0 1px 3px #000;
+}
+
+/* marco chico: modo "solo código" (la franja del código de la esquina) */
+.guide-frame--code {
+  height: auto;
+  width: 78%;
+  aspect-ratio: 5 / 2;          /* franja apaisada acorde al teléfono: texto del código */
+}
+.guide-frame--code .guide-label {
+  top: auto;
+  bottom: -1.8rem;
 }
 
 .cam-actions { display: flex; gap: .5rem; padding: .75rem .5rem .25rem; }

@@ -21,6 +21,7 @@ const priceCredit = document.getElementById("price-credit");
 
 const scanner = new CameraScanner();
 let lastCanvas = null; // última imagen capturada para la comparativa
+let scanMode = "full"; // "full" (carta completa) | "code" (solo esquina del código)
 
 /* ------------------ utilidades UI ------------------ */
 
@@ -71,9 +72,13 @@ function renderScanView() {
       <h2>📷 Escanear carta</h2>
       <p class="hint">Enfoca la carta completa con buena luz. Si el OCR falla, sube una foto o añade el código a mano.</p>
       ${CameraScanner.isSupported() ? `
+        <div class="mode-switch" role="tablist" aria-label="Modo de captura">
+          <button class="mode-btn active" data-mode="full" role="tab" aria-selected="true">🃏 Carta completa</button>
+          <button class="mode-btn" data-mode="code" role="tab" aria-selected="false">🔍 Solo código</button>
+        </div>
         <div class="camera-wrap">
           <video id="cam" playsinline muted autoplay></video>
-          <div class="guide-frame" aria-hidden="true">
+          <div id="guide" class="guide-frame" aria-hidden="true">
             <span class="guide-label">Cabe la carta completa dentro de este marco</span>
           </div>
           <div class="cam-actions">
@@ -106,6 +111,23 @@ function renderScanView() {
   const status = document.getElementById("scan-status");
   const result = document.getElementById("scan-result");
 
+  // --- switch de modo (carta completa / solo código) ---
+  const guide = document.getElementById("guide");
+  view.querySelectorAll(".mode-btn").forEach((b) => {
+    b.onclick = () => {
+      scanMode = b.dataset.mode;
+      view.querySelectorAll(".mode-btn").forEach((x) => {
+        const active = x.dataset.mode === scanMode;
+        x.classList.toggle("active", active);
+        x.setAttribute("aria-selected", active);
+      });
+      guide.classList.toggle("guide-frame--code", scanMode === "code");
+      guide.querySelector(".guide-label").textContent = scanMode === "code"
+        ? "Alinea el texto del código dentro de este marco"
+        : "Cabe la carta completa dentro de este marco";
+    };
+  });
+
   if (btnStart) {
     btnStart.onclick = async () => {
       try {
@@ -118,8 +140,16 @@ function renderScanView() {
       }
     };
     btnCapture.onclick = async () => {
-      const canvas = scanner.capture(null);
-      if (canvas) await identify(canvas, status, result);
+      // modo "solo código": recortamos exactamente lo que el usuario encaja en el marco
+      const canvas = scanMode === "code" && guide
+        ? scanner.captureFrame(guide)
+        : scanner.capture(null);
+      if (!canvas) {
+        // marco fuera de rango → captura completa como respaldo
+        await identify(scanner.capture(null), status, result);
+        return;
+      }
+      await identify(canvas, status, result);
     };
   }
 
@@ -136,16 +166,11 @@ function renderScanView() {
 
   btnManual.onclick = async () => {
     try { await catalog.ensureLoaded(); } catch (e) { return toast(`No se pudo cargar el catálogo: ${e.message}`); }
-    const raw = manualCode.value.trim();
-    let code = catalog.fixCodeCandidate(raw);
-    if (!code) {
-      // si tiene forma de código pero no existe en el catálogo → aviso de no verificado
-      const up = raw.toUpperCase().replace(/[—–_\s]/g, "-").replace(/-+/g, "-");
-      if (/^[A-Z0-9]{1,4}-\d{2,4}$/.test(up)) code = up;
-      else return toast("Código no reconocido. Formato: OP09-004 / ST21-007");
-    }
-    const variants = catalog.getCode(code);
-    if (!variants.length) return showNotVerified(code, status, result);
+    const parsed = catalog.strictParse(manualCode.value);
+    if (!parsed) return toast("Código no reconocido. Formato: OP09-004 / ST21-007");
+    // entrada manual = modo estricto: jamás "corregimos" el set en silencio
+    const variants = catalog.getCode(parsed.code);
+    if (!variants.length) return showNotVerified(parsed.code, status, result);
     status.hidden = true;
     renderResult(variants, null, result);
   };
@@ -212,10 +237,12 @@ async function identify(canvas, status, result) {
   }
 
   // 3) nada confiable
+  const tightFailed = scanMode === "code";
   status.innerHTML = `
     <p>⚠️ No pude identificar la carta con confianza.</p>
     <p class="hint">Consejos: mejor luz, carta completa en el marco, sin reflejos.
-    También puedes escribir el código a mano abajo.</p>`;
+    También puedes escribir el código a mano abajo.</p>
+    ${tightFailed ? `<p class="hint warn">Estás en modo "Solo código": si el texto quedó borroso o cortado, prueba con más luz, acercás el marco o cambia a "Carta completa" para que se lea también el nombre.</p>` : ""}`;
 }
 
 function findCode(text) {
@@ -427,7 +454,9 @@ function renderSettingsView() {
 
       <h3>🧭 Uso responsable de esta app</h3>
       <ul>
-        <li>Catálogo de cartas <strong>pre-cargado localmente</strong>: 0 llamadas a ninguna API.</li>
+        <li>Catálogo de cartas <strong>pre-cargado localmente</strong>: 0 llamadas a ninguna API.
+          Fuente: <a href="https://github.com/buhbbl/punk-records" target="_blank" rel="noopener">punk-records</a>
+          (datos del site oficial de Bandai, actualizados automáticamente cada pocos días).</li>
         <li>Precios: <strong>caché IndexedDB de 24h</strong> por carta + espaciado ≥ 1.1s por consulta.</li>
         <li>OCR y cámara corren <strong>100% en tu navegador</strong>: ninguna imagen sale de tu equipo.</li>
         <li>Imágenes oficiales: se intentan cargar directo del CDN de Bandai; si el hotlink falla,

@@ -14,7 +14,7 @@
   Para actualizar la app: subí estos archivos y CAMBIÉ VERSION.
   ============================================================ */
 
-const VERSION = "v1.0.0";
+const VERSION = "v1.2.0"; // + modo zoom de código (recorte WYSIWYG del marco guía)
 const SHELL_CACHE = `opcg-shell-${VERSION}`;
 const IMG_CACHE = "opcg-imgs";
 const IMG_LIMIT = 300;
